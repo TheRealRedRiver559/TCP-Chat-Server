@@ -1,9 +1,10 @@
+from json.decoder import JSONDecodeError
 import socket
 import threading
 import json
 
-file_path = 'Tcp Server\\users.json' #Change paths to your likings
-description_path = 'Tcp Server\Descriptions.json'
+users_path = 'storage\\users.json'
+description_path = 'storage\\descriptions.json'
 
 def main():
     host = 'localhost'
@@ -18,15 +19,15 @@ def main():
     #clients and users will be combined in a dictionary soon
     users = []
     commands = {}
-    prefix = '//' #changable prefix for all commands and descriptipns
+    prefix = '//'
 
-    with open(description_path, 'r') as f:
+    with open(description_path, 'r') as f: #Opens the descriptions and replaces prefix
         descriptions = json.load(f)
         for command in descriptions:
             descriptions[command]['usage'] = descriptions[command]['usage'].replace('@@@', prefix)
             descriptions[command]['examples']= descriptions[command]['examples'].replace('@@@', prefix)
 
-    error_message = {
+    error_message = { #error messages for certain events like users disconecting
         'Leave': 'Connection closed by client.',
         'Close': 'Connection closed by server.',
         'Connection': 'User already connected.',
@@ -41,7 +42,7 @@ def main():
 
     #broadcasts a message specifying the current # of connections
     @command('connections', 1)
-    def client_connections(username):
+    def client_connections(username : str):
         client_connections = len(clients)
         broadcast(f'{username}: {prefix}connections')
         broadcast(f'Server: Clients online: {client_connections}')
@@ -49,7 +50,7 @@ def main():
     
     #broadcasts a list of users online
     @command('users', 2)
-    def users_online(username):
+    def users_online(username : str):
         broadcast(f'{username}: {prefix}users')
         user_list = [user for user in users]
         broadcast(f'Server: Users: {user_list}')
@@ -57,7 +58,7 @@ def main():
     
     #sends a list of all users inside the 'banned user' list
     @command('banned-users', 3)
-    def users_banned(username):
+    def users_banned(username : str):
         broadcast(f'{username}: {prefix}banned-users')
         banned_list = [user for user in banned_users]
         broadcast(f'Server: Banned Users: {banned_list}')
@@ -65,7 +66,7 @@ def main():
     
     #bans users (Command syntax : ban <username> [silent] [reason])
     @command('ban', 3)
-    def ban_user(username, arguments):
+    def ban_user(username : str, arguments : list):
         reason = None
         silent_ban = False
         client = clients[users.index(username)]
@@ -76,7 +77,7 @@ def main():
                 silent_ban = True
                 reason = " ".join(arguments[2:])
 
-        with open(file_path, 'r') as f:
+        with open(users_path, 'r') as f:
             data = json.load(f)
 
             user_role_id = data[username]['role_id']
@@ -113,7 +114,7 @@ def main():
 
     #unbans users
     @command('unban', 3)
-    def unban_user(username, arguments):
+    def unban_user(username : str, arguments : list):
 
         silent_unban = False
         client = clients[users.index(username)]
@@ -122,7 +123,7 @@ def main():
             if (arguments[1]).lower() == 'silent':
                 silent_unban = True
 
-        with open(file_path, 'r') as f:
+        with open(users_path, 'r') as f:
             data = json.load(f)
 
             user_role_id = data[username]['role_id']
@@ -154,7 +155,7 @@ def main():
         print(f'Server: Command: {prefix}unban {target_username} silent={silent_unban} (Username: {username})')
 
     @command('kick', 2)
-    def kick_user(username, arguments):
+    def kick_user(username : str, arguments : list):
         #kicks users but still allows them to join back
         reason = None
         silent_kick = False
@@ -166,7 +167,7 @@ def main():
                 silent_kick = True
                 reason = " ".join(arguments[2:])
 
-        with open(file_path, 'r') as f:
+        with open(users_path, 'r') as f:
             data = json.load(f)
             
             user_role_id = data[username]['role_id']
@@ -202,7 +203,7 @@ def main():
         user_leave(target_client, error_message['Close'])
 
     @command('help', 2)
-    def help_command(username, arguments=None):
+    def help_command(username : str, arguments=None):
         #sends a list of all commands. Can show specific details about a command with a argument (Command syntax : //help [command])
         #Soon to change to show commands accessable to that permission level.
         index = users.index(username)
@@ -230,11 +231,11 @@ def main():
         print(f'Server: Command: {prefix}help (Username: {username})')
     
     #message for missing permission
-    def missing_permissions(client, message):
+    def missing_permissions(client : socket, message : str):
         send_message(client ,f'Server: Missing permissions for the command named: {message.lower()}')
     
     #broadcasts a message to all clients. Can send to all axcept certain clients.
-    def broadcast(message, dont_send_to=None):
+    def broadcast(message : str, dont_send_to=None):
         for client in clients:
             if dont_send_to != None:
                 if dont_send_to != client:
@@ -245,7 +246,7 @@ def main():
                 send_message(client ,message)
 
     #command proccesing, checks for permissions and command validity
-    def proccess_command(client, message, username):
+    def proccess_command(client : socket, message : str, username : str):
         command_name, *arguments = message.split(" ")
         try:
             command = commands[command_name][0]
@@ -253,7 +254,7 @@ def main():
             send_message(client ,f'Server: Invalid Command! no command named: {command_name.lower()}')
             return
 
-        with open(file_path, 'r') as f:
+        with open(users_path, 'r') as f:
             data = json.load(f)
 
             role_id = data[username]['role_id']
@@ -274,10 +275,10 @@ def main():
         else:
             missing_permissions(client ,command_name)      
 
-    def recv_message(client):
+    def recv_message(client : socket):
         message = client.recv(1024).decode()
         return message[3:]
-    def send_message(client, message):
+    def send_message(client : socket, message : str):
         length = str(len(message)).zfill(3)
         client.send(f'{length}{message}'.encode())
         return
@@ -285,7 +286,7 @@ def main():
 
 
     #main client listener for messages and commands.
-    def handle_client(client):
+    def handle_client(client : socket):
         while True:
             try:
                 message = recv_message(client)
@@ -307,7 +308,7 @@ def main():
                 break
 
     #error handling for users leaving. Leave message on ban is optional
-    def user_leave(client, leave_reason, broadcast_leave=True):
+    def user_leave(client : socket, leave_reason : str, broadcast_leave=True):
         address = client.getpeername()
         client.close()
         try:
@@ -352,8 +353,12 @@ def main():
                 pass
 
             #No hashing or anything of the sort is being added until later.
-            with open(file_path, 'r') as f:
-                data = json.load(f)
+            with open(users_path, 'r') as f:
+                try:
+                    data = json.load(f)
+                except JSONDecodeError: #no users in json file
+                    failed_login(client)
+                    continue
 
                 if username in data:
                     user_info = data[username]
