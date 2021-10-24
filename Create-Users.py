@@ -2,7 +2,7 @@ import json
 import os.path
 from json import JSONDecodeError
 
-file_path = 'Tcp Server\\users.json'
+file_path = 'storage\\users.json'
 
 def create_user():
     if not os.path.exists(file_path):
