@@ -389,5 +389,4 @@ def main():
     receive()
 
 if __name__ == "__main__":
-    t1 = threading.Thread(main())
-    t1.start()
+    main()
